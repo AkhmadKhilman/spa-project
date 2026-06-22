@@ -1,0 +1,1117 @@
+<!DOCTYPE html>
+<html lang="id">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>🍔 MonkFast - Cepat, Enak, Asik!</title>
+
+    <!-- Tailwind CSS untuk Styling Modern -->
+    <script src="https://cdn.tailwindcss.com"></script>
+
+    <!-- Google Fonts: Poppins untuk kesan modern -->
+    <link href="https://fonts.googleapis.com/css2?family=Poppins:wght@300;400;600;800&display=swap" rel="stylesheet">
+
+    <!-- FontAwesome untuk Ikon -->
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+
+    <!-- Chart.js untuk Grafik Admin -->
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+
+    <!-- jsPDF & AutoTable untuk cetak Laporan -->
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf-autotable/3.5.28/jspdf.plugin.autotable.min.js"></script>
+
+    <script>
+        tailwind.config = {
+            theme: {
+                extend: {
+                    fontFamily: { sans: ['Poppins', 'sans-serif'] },
+                    colors: { brand: '#FF5722', dark: '#111827', light: '#F9FAFB' }
+                }
+            }
+        }
+    </script>
+
+    <style>
+        body {
+            font-family: 'Poppins', sans-serif;
+            background-color: #F9FAFB;
+            overflow-x: hidden;
+        }
+
+        /* Hide scrollbar for clean look */
+        ::-webkit-scrollbar {
+            width: 8px;
+        }
+
+        ::-webkit-scrollbar-track {
+            background: transparent;
+        }
+
+        ::-webkit-scrollbar-thumb {
+            background: #cbd5e1;
+            border-radius: 10px;
+        }
+
+        ::-webkit-scrollbar-thumb:hover {
+            background: #94a3b8;
+        }
+
+        .glass {
+            background: rgba(255, 255, 255, 0.7);
+            backdrop-filter: blur(10px);
+        }
+
+        .card-hover:hover {
+            transform: translateY(-5px);
+            transition: all 0.3s ease;
+            box-shadow: 0 20px 25px -5px rgba(0, 0, 0, 0.1), 0 10px 10px -5px rgba(0, 0, 0, 0.04);
+        }
+
+        #toast-container {
+            position: fixed;
+            bottom: 20px;
+            right: 20px;
+            z-index: 9999;
+            display: flex;
+            flex-direction: column;
+            gap: 10px;
+        }
+
+        .toast {
+            padding: 12px 20px;
+            border-radius: 12px;
+            color: white;
+            font-weight: 600;
+            animation: slideIn 0.3s ease forwards;
+            box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1);
+        }
+
+        .toast.success {
+            background-color: #10B981;
+        }
+
+        .toast.error {
+            background-color: #EF4444;
+        }
+
+        @keyframes slideIn {
+            from {
+                transform: translateX(100%);
+                opacity: 0;
+            }
+
+            to {
+                transform: translateX(0);
+                opacity: 1;
+            }
+        }
+
+        /* Loader */
+        .loader {
+            border: 4px solid #f3f3f3;
+            border-top: 4px solid #FF5722;
+            border-radius: 50%;
+            width: 40px;
+            height: 40px;
+            animation: spin 1s linear infinite;
+            margin: 0 auto;
+        }
+
+        @keyframes spin {
+            0% {
+                transform: rotate(0deg);
+            }
+
+            100% {
+                transform: rotate(360deg);
+            }
+        }
+    </style>
+</head>
+
+<body class="text-dark">
+
+    <div id="app" class="min-h-screen flex flex-col">
+        <div class="flex-1 flex items-center justify-center">
+            <div class="loader"></div>
+        </div>
+    </div>
+    <div id="toast-container"></div>
+
+    <!-- Firebase SDK & Logic Aplikasi -->
+    <script type="module">
+        import { initializeApp } from "https://www.gstatic.com/firebasejs/10.8.1/firebase-app.js";
+        import { getAuth, signInWithPopup, GoogleAuthProvider, signInWithEmailAndPassword, signOut, onAuthStateChanged } from "https://www.gstatic.com/firebasejs/10.8.1/firebase-auth.js";
+        import { getFirestore, collection, doc, setDoc, getDoc, getDocs, addDoc, updateDoc, deleteDoc, serverTimestamp } from "https://www.gstatic.com/firebasejs/10.8.1/firebase-firestore.js";
+
+        // Konfigurasi Firebase
+        const firebaseConfig = {
+            apiKey: "AIzaSyBxNcXQatjtjmizKrMzeXUNPCOrR3Z9qDc",
+            authDomain: "monkfast.firebaseapp.com",
+            projectId: "monkfast",
+            storageBucket: "monkfast.firebasestorage.app",
+            messagingSenderId: "175632586669",
+            appId: "1:175632586669:web:44a88f2bb2d7e15b3d3324"
+        };
+
+        const app = initializeApp(firebaseConfig);
+        const auth = getAuth(app);
+        const db = getFirestore(app);
+
+        // --- STATE MANAJEMEN ---
+        const state = {
+            user: null,
+            role: null,
+            currentView: 'login',
+            menuItems: [],
+            cart: [],
+            orders: [],
+            allOrders: [],
+            chartInstance: null,
+            isRouting: false
+        };
+
+        const formatRp = (angka) => new Intl.NumberFormat('id-ID', { style: 'currency', currency: 'IDR', minimumFractionDigits: 0 }).format(angka);
+
+        window.showToast = (msg, type = 'success') => {
+            const container = document.getElementById('toast-container');
+            const toast = document.createElement('div');
+            toast.className = `toast ${type}`;
+            toast.innerText = msg;
+            container.appendChild(toast);
+            setTimeout(() => { toast.remove(); }, 3000);
+        };
+
+        // --- AUTHENTICATION ---
+        onAuthStateChanged(auth, async (user) => {
+            if (user) {
+                try {
+                    if (state.isRouting) return;
+                    state.isRouting = true;
+
+                    const userDoc = await getDoc(doc(db, "users", user.uid));
+
+                    if (!auth.currentUser || auth.currentUser.uid !== user.uid) {
+                        state.isRouting = false;
+                        return;
+                    }
+
+                    if (userDoc.exists()) {
+                        state.role = userDoc.data().role;
+                    } else {
+                        state.role = 'customer';
+                        await setDoc(doc(db, "users", user.uid), {
+                            name: user.displayName || 'Customer',
+                            email: user.email,
+                            role: 'customer',
+                            createdAt: serverTimestamp()
+                        });
+                    }
+
+                    state.user = user;
+
+                    if (state.currentView === 'login') {
+                        if (state.role === 'admin') {
+                            navigate('admin_dash');
+                        } else {
+                            await fetchMenu();
+                            if (auth.currentUser) navigate('home');
+                        }
+                    }
+                    state.isRouting = false;
+                } catch (error) {
+                    console.error("Auth Listener Error:", error);
+                    state.isRouting = false;
+                }
+            } else {
+                state.user = null;
+                state.role = null;
+                state.cart = [];
+                state.isRouting = false;
+                navigate('login');
+            }
+        });
+
+        window.loginGoogle = async () => {
+            const provider = new GoogleAuthProvider();
+            try {
+                await signInWithPopup(auth, provider);
+                showToast("Berhasil login!");
+            } catch (error) {
+                if (error.code === 'auth/popup-closed-by-user') {
+                    showToast("Login dibatalkan.", "error");
+                } else {
+                    showToast("Gagal login: " + error.message, "error");
+                }
+            }
+        };
+
+        window.loginAdmin = async (e) => {
+            e.preventDefault();
+            const email = document.getElementById('adminEmail').value;
+            const pass = document.getElementById('adminPass').value;
+            try {
+                state.isRouting = true;
+                const userCredential = await signInWithEmailAndPassword(auth, email, pass);
+                const userRef = doc(db, "users", userCredential.user.uid);
+                let userDoc = await getDoc(userRef);
+
+                // [PERBAIKAN FITUR ADMIN]
+                // Jika login berhasil tapi dokumen belum ada di Firestore (karena baru didaftarkan via Authentication Console)
+                // Sistem akan otomatis membuatkan data sebagai admin.
+                if (!userDoc.exists()) {
+                    await setDoc(userRef, {
+                        name: 'Admin MonkFast',
+                        email: email,
+                        role: 'admin',
+                        createdAt: serverTimestamp()
+                    });
+                    userDoc = await getDoc(userRef); // Ambil data terbarunya
+                }
+
+                if (userDoc.exists() && userDoc.data().role === 'admin') {
+                    state.user = userCredential.user;
+                    state.role = 'admin';
+                    showToast("Selamat datang, Admin!");
+                    navigate('admin_dash');
+                } else {
+                    await signOut(auth);
+                    showToast("Akun ini bukan admin!", "error");
+                    state.user = null;
+                    state.role = null;
+                }
+            } catch (error) {
+                console.error(error);
+                showToast("Email/Password salah!", "error");
+            } finally {
+                state.isRouting = false;
+            }
+        };
+
+        window.doLogout = async () => {
+            await signOut(auth);
+            showToast("Berhasil logout!");
+        };
+
+        // --- DATA FETCHING ---
+        async function fetchMenu() {
+            try {
+                const querySnapshot = await getDocs(collection(db, "menu"));
+                state.menuItems = querySnapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
+            } catch (e) {
+                console.warn("Error menu diabaikan sementara (tunggu sync rule selesai)");
+            }
+        }
+
+        async function fetchCustomerOrders() {
+            if (!auth.currentUser) return;
+            try {
+                const querySnapshot = await getDocs(collection(db, "orders"));
+                let myOrders = [];
+                querySnapshot.forEach((doc) => {
+                    let data = doc.data();
+                    if (data.userId === state.user.uid) myOrders.push({ id: doc.id, ...data });
+                });
+                myOrders.sort((a, b) => b.createdAt?.toMillis() - a.createdAt?.toMillis());
+                state.orders = myOrders;
+            } catch (e) { console.error("Error orders:", e); }
+        }
+
+        async function fetchAllOrders() {
+            if (!auth.currentUser || state.role !== 'admin') return;
+            try {
+                const querySnapshot = await getDocs(collection(db, "orders"));
+                state.allOrders = querySnapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
+                state.allOrders.sort((a, b) => b.createdAt?.toMillis() - a.createdAt?.toMillis());
+            } catch (e) { console.error("Error all orders:", e); }
+        }
+
+        // --- ROUTER & RENDERER ---
+        window.navigate = async (view) => {
+            state.currentView = view;
+            const appDiv = document.getElementById('app');
+            appDiv.innerHTML = '<div class="flex-1 flex items-center justify-center"><div class="loader"></div></div>';
+
+            if (view === 'login') appDiv.innerHTML = renderLogin();
+            else if (state.role === 'customer') {
+                if (view === 'home') {
+                    await fetchMenu();
+                    appDiv.innerHTML = renderCustomerLayout(renderHome());
+                }
+                else if (view === 'cart') appDiv.innerHTML = renderCustomerLayout(renderCart());
+                else if (view === 'profile') {
+                    await fetchCustomerOrders();
+                    appDiv.innerHTML = renderCustomerLayout(renderProfile());
+                }
+            } else if (state.role === 'admin') {
+                await fetchMenu();
+                await fetchAllOrders();
+                if (view === 'admin_dash') {
+                    appDiv.innerHTML = renderAdminLayout(renderAdminDashboard());
+                    initChart();
+                }
+                else if (view === 'admin_menu') appDiv.innerHTML = renderAdminLayout(renderAdminMenu());
+                else if (view === 'admin_reports') appDiv.innerHTML = renderAdminLayout(renderAdminReports());
+            }
+        };
+
+        // --- UI COMPONENTS: LOGIN ---
+        function renderLogin() {
+            return `
+            <div class="min-h-screen flex items-center justify-center bg-gray-100 p-4">
+                <div class="bg-white p-8 rounded-3xl shadow-xl max-w-4xl w-full flex flex-col md:flex-row overflow-hidden relative">
+                    <div class="absolute -top-10 -right-10 w-32 h-32 bg-brand rounded-full opacity-20 blur-2xl"></div>
+                    
+                    <div class="md:w-1/2 p-6 flex flex-col justify-center border-b md:border-b-0 md:border-r border-gray-100">
+                        <div class="mb-8">
+                            <h1 class="text-4xl font-black text-dark tracking-tighter">🍔 Monk<span class="text-brand">Fast</span></h1>
+                            <p class="text-gray-500 mt-2 text-sm">Lapar? Tinggal tap-tap, makan sampai. Se-simpel itu bestie!</p>
+                        </div>
+                        
+                        <div class="space-y-4">
+                            <h2 class="text-lg font-bold">Login Customer</h2>
+                            <button onclick="loginGoogle()" class="w-full flex items-center justify-center gap-3 bg-white border-2 border-gray-200 text-gray-700 py-3 px-4 rounded-xl font-bold hover:bg-gray-50 transition card-hover">
+                                <img src="https://www.svgrepo.com/show/475656/google-color.svg" class="w-5 h-5" alt="Google">
+                                Sign in with Google
+                            </button>
+                        </div>
+                    </div>
+                    
+                    <div class="md:w-1/2 p-6 bg-gray-50 rounded-2xl mt-6 md:mt-0 md:ml-6 flex flex-col justify-center">
+                        <h2 class="text-lg font-bold mb-4"><i class="fa-solid fa-lock text-brand mr-2"></i>Admin Area</h2>
+                        <form onsubmit="loginAdmin(event)" class="space-y-4">
+                            <div>
+                                <label class="text-xs font-semibold text-gray-500">Email Admin</label>
+                                <input type="email" id="adminEmail" required class="w-full mt-1 p-3 rounded-xl border border-gray-300 focus:border-brand focus:ring-2 focus:ring-brand focus:outline-none transition">
+                            </div>
+                            <div>
+                                <label class="text-xs font-semibold text-gray-500">Password</label>
+                                <input type="password" id="adminPass" required class="w-full mt-1 p-3 rounded-xl border border-gray-300 focus:border-brand focus:ring-2 focus:ring-brand focus:outline-none transition">
+                            </div>
+                            <button type="submit" class="w-full bg-dark text-white py-3 rounded-xl font-bold hover:bg-black transition card-hover">
+                                Login Admin
+                            </button>
+                        </form>
+                    </div>
+                </div>
+            </div>`;
+        }
+
+        // --- UI COMPONENTS: CUSTOMER ---
+        function renderCustomerLayout(content) {
+            const cartCount = state.cart.reduce((sum, item) => sum + item.qty, 0);
+            return `
+            <!-- Topbar (Mobile) -->
+            <div class="md:hidden glass sticky top-0 z-50 px-4 py-4 border-b border-gray-200 flex justify-between items-center">
+                <h1 class="text-2xl font-black text-dark tracking-tighter">🍔 Monk<span class="text-brand">Fast</span></h1>
+                <div class="flex gap-4">
+                    <button onclick="navigate('cart')" class="relative text-gray-600 hover:text-brand transition">
+                        <i class="fa-solid fa-cart-shopping text-xl"></i>
+                        ${cartCount > 0 ? `<span class="absolute -top-2 -right-2 bg-brand text-white text-[10px] font-bold px-1.5 py-0.5 rounded-full">${cartCount}</span>` : ''}
+                    </button>
+                </div>
+            </div>
+
+            <div class="flex flex-col md:flex-row min-h-screen">
+                <!-- Sidebar Desktop & Bottom Nav Mobile -->
+                <nav class="glass fixed bottom-0 w-full md:w-64 md:relative md:h-screen border-t md:border-r border-gray-200 z-40 flex flex-row md:flex-col justify-around md:justify-start md:p-6 p-3">
+                    <div class="hidden md:block mb-10">
+                        <h1 class="text-3xl font-black text-dark tracking-tighter cursor-pointer" onclick="navigate('home')">🍔 Monk<span class="text-brand">Fast</span></h1>
+                    </div>
+                    
+                    <button onclick="navigate('home')" class="flex flex-col md:flex-row items-center md:gap-4 p-2 md:p-3 rounded-xl transition ${state.currentView === 'home' ? 'text-brand md:bg-brand/10' : 'text-gray-500 hover:text-brand'}">
+                        <i class="fa-solid fa-house text-xl"></i>
+                        <span class="text-xs md:text-base font-bold mt-1 md:mt-0">Menu</span>
+                    </button>
+                    
+                    <button onclick="navigate('cart')" class="flex flex-col md:flex-row items-center md:gap-4 p-2 md:p-3 rounded-xl transition relative ${state.currentView === 'cart' ? 'text-brand md:bg-brand/10' : 'text-gray-500 hover:text-brand'}">
+                        <div class="relative">
+                            <i class="fa-solid fa-cart-shopping text-xl"></i>
+                            ${cartCount > 0 ? `<span class="absolute -top-2 -right-2 bg-brand text-white text-[10px] font-bold px-1.5 py-0.5 rounded-full md:hidden">${cartCount}</span>` : ''}
+                        </div>
+                        <span class="text-xs md:text-base font-bold mt-1 md:mt-0">Keranjang</span>
+                        ${cartCount > 0 ? `<span class="hidden md:inline-flex ml-auto bg-brand text-white text-xs font-bold px-2 py-1 rounded-full">${cartCount}</span>` : ''}
+                    </button>
+                    
+                    <button onclick="navigate('profile')" class="flex flex-col md:flex-row items-center md:gap-4 p-2 md:p-3 rounded-xl transition ${state.currentView === 'profile' ? 'text-brand md:bg-brand/10' : 'text-gray-500 hover:text-brand'}">
+                        <i class="fa-solid fa-user text-xl"></i>
+                        <span class="text-xs md:text-base font-bold mt-1 md:mt-0">Profil</span>
+                    </button>
+                </nav>
+
+                <!-- Main Content -->
+                <main class="flex-1 p-4 md:p-8 pb-32 md:pb-8 h-screen overflow-y-auto w-full overflow-x-hidden">
+                    ${content}
+                </main>
+            </div>`;
+        }
+
+        window.handleSearch = (e) => {
+            const keyword = e.target.value.toLowerCase();
+            const filtered = state.menuItems.filter(item => item.name.toLowerCase().includes(keyword));
+            document.getElementById('menu-grid').innerHTML = generateMenuCards(filtered);
+        };
+
+        window.filterCategory = (cat) => {
+            const filtered = cat === 'all' ? state.menuItems : state.menuItems.filter(item => item.category === cat);
+            document.getElementById('menu-grid').innerHTML = generateMenuCards(filtered);
+
+            document.querySelectorAll('.cat-btn').forEach(btn => {
+                btn.classList.remove('bg-dark', 'text-white');
+                btn.classList.add('bg-white', 'text-gray-600');
+            });
+            event.currentTarget.classList.remove('bg-white', 'text-gray-600');
+            event.currentTarget.classList.add('bg-dark', 'text-white');
+        };
+
+        window.sortPrice = (e) => {
+            const order = e.target.value;
+            let sorted = [...state.menuItems];
+            if (order === 'asc') sorted.sort((a, b) => a.price - b.price);
+            if (order === 'desc') sorted.sort((a, b) => b.price - a.price);
+            document.getElementById('menu-grid').innerHTML = generateMenuCards(sorted);
+        };
+
+        function generateMenuCards(items) {
+            if (items.length === 0) return `<div class="col-span-full text-center py-10 text-gray-400 font-bold">Yah, menunya nggak ketemu :(</div>`;
+            return items.map(item => `
+                <div class="bg-white p-4 rounded-3xl shadow-sm border border-gray-100 flex flex-col justify-between card-hover">
+                    <div>
+                        <div class="w-full h-40 bg-gray-100 rounded-2xl mb-4 flex items-center justify-center overflow-hidden">
+                            ${item.image ? `<img src="${item.image}" class="w-full h-full object-cover">` : `<i class="fa-solid fa-burger text-5xl text-gray-300"></i>`}
+                        </div>
+                        <div class="text-xs font-bold text-brand uppercase tracking-wider mb-1">${item.category}</div>
+                        <h3 class="font-bold text-lg leading-tight mb-1 truncate">${item.name}</h3>
+                        <p class="text-gray-400 text-xs mb-4 line-clamp-2">${item.description}</p>
+                    </div>
+                    <div class="flex items-center justify-between mt-auto pt-2 border-t border-gray-50">
+                        <span class="font-black text-lg">${formatRp(item.price)}</span>
+                        <button onclick="addToCart('${item.id}')" class="bg-dark text-white w-10 h-10 rounded-full flex items-center justify-center hover:bg-brand transition transform hover:scale-110 flex-shrink-0">
+                            <i class="fa-solid fa-plus"></i>
+                        </button>
+                    </div>
+                </div>
+            `).join('');
+        }
+
+        window.addToCart = (id) => {
+            const item = state.menuItems.find(i => i.id === id);
+            if (!item) return;
+            const existing = state.cart.find(i => i.id === id);
+            if (existing) existing.qty++;
+            else state.cart.push({ ...item, qty: 1 });
+            showToast(`${item.name} masuk keranjang! 🛒`);
+            if (state.currentView !== 'cart') navigate('home');
+        };
+
+        function renderHome() {
+            return `
+            <div class="max-w-6xl mx-auto w-full">
+                <div class="flex flex-col md:flex-row justify-between items-start md:items-center mb-8 gap-4">
+                    <div class="w-full md:w-auto">
+                        <h2 class="text-2xl md:text-3xl font-black">Mau makan apa hari ini, ${state.user.displayName.split(' ')[0]}? 😋</h2>
+                    </div>
+                    <div class="w-full md:w-auto relative">
+                        <i class="fa-solid fa-magnifying-glass absolute left-4 top-3.5 text-gray-400"></i>
+                        <input type="text" onkeyup="handleSearch(event)" placeholder="Cari makanan..." class="w-full md:w-72 pl-10 pr-4 py-3 rounded-2xl border-none shadow-sm focus:ring-2 focus:ring-brand focus:outline-none bg-white font-medium">
+                    </div>
+                </div>
+
+                <div class="flex flex-wrap items-center gap-3 mb-8">
+                    <button onclick="filterCategory('all')" class="cat-btn bg-dark text-white px-5 py-2.5 rounded-2xl font-bold text-sm transition card-hover">Semua</button>
+                    <button onclick="filterCategory('Burger')" class="cat-btn bg-white text-gray-600 px-5 py-2.5 rounded-2xl font-bold text-sm shadow-sm transition card-hover border border-gray-100 whitespace-nowrap">🍔 Burger</button>
+                    <button onclick="filterCategory('Pizza')" class="cat-btn bg-white text-gray-600 px-5 py-2.5 rounded-2xl font-bold text-sm shadow-sm transition card-hover border border-gray-100 whitespace-nowrap">🍕 Pizza</button>
+                    <button onclick="filterCategory('Snack')" class="cat-btn bg-white text-gray-600 px-5 py-2.5 rounded-2xl font-bold text-sm shadow-sm transition card-hover border border-gray-100 whitespace-nowrap">🍟 Snack</button>
+                    <button onclick="filterCategory('Minuman')" class="cat-btn bg-white text-gray-600 px-5 py-2.5 rounded-2xl font-bold text-sm shadow-sm transition card-hover border border-gray-100 whitespace-nowrap">🥤 Minuman</button>
+                    
+                    <select onchange="sortPrice(event)" class="w-full md:w-auto md:ml-auto mt-2 md:mt-0 bg-white border border-gray-200 text-gray-600 text-sm rounded-2xl focus:ring-brand focus:border-brand block px-4 py-2.5 font-bold shadow-sm outline-none">
+                        <option value="">Filter Harga</option>
+                        <option value="asc">Termurah</option>
+                        <option value="desc">Termahal</option>
+                    </select>
+                </div>
+
+                <div id="menu-grid" class="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-6 pb-4">
+                    ${generateMenuCards(state.menuItems)}
+                </div>
+            </div>`;
+        }
+
+        window.updateQty = (id, delta) => {
+            const item = state.cart.find(i => i.id === id);
+            if (item) {
+                item.qty += delta;
+                if (item.qty <= 0) state.cart = state.cart.filter(i => i.id !== id);
+                navigate('cart');
+            }
+        };
+
+        window.processCheckout = async () => {
+            if (state.cart.length === 0) return;
+            try {
+                const total = state.cart.reduce((sum, item) => sum + (item.price * item.qty), 0);
+                const orderData = {
+                    userId: state.user.uid,
+                    customerName: state.user.displayName,
+                    items: state.cart,
+                    totalAmount: total,
+                    status: 'Pending',
+                    createdAt: serverTimestamp()
+                };
+
+                await window.fbAddDoc(collection(db, "orders"), orderData);
+
+                state.cart = [];
+                showToast("Yeay! Pesanan berhasil dibuat 🎉");
+                navigate('profile');
+            } catch (error) {
+                console.error(error);
+                showToast("Gagal checkout: " + error.message, "error");
+            }
+        };
+        window.fbAddDoc = addDoc;
+
+        function renderCart() {
+            let total = state.cart.reduce((sum, item) => sum + (item.price * item.qty), 0);
+
+            let cartItemsHTML = state.cart.length === 0 ?
+                `<div class="text-center py-20"><i class="fa-solid fa-basket-shopping text-6xl text-gray-200 mb-4"></i><p class="text-gray-400 font-bold">Keranjang masih kosong nih.</p><button onclick="navigate('home')" class="mt-4 text-brand font-bold underline">Jajan yuk!</button></div>` :
+                state.cart.map(item => `
+                    <div class="bg-white p-4 rounded-3xl shadow-sm border border-gray-100 flex flex-wrap sm:flex-nowrap items-center gap-4 mb-4">
+                        <div class="w-16 h-16 bg-gray-100 rounded-2xl flex-shrink-0 flex items-center justify-center overflow-hidden">
+                             ${item.image ? `<img src="${item.image}" class="w-full h-full object-cover">` : `<i class="fa-solid fa-burger text-2xl text-gray-300"></i>`}
+                        </div>
+                        <div class="flex-1 min-w-[150px]">
+                            <h4 class="font-bold text-dark truncate">${item.name}</h4>
+                            <div class="text-brand font-bold text-sm">${formatRp(item.price)}</div>
+                        </div>
+                        <div class="flex items-center gap-3 bg-gray-50 rounded-full px-3 py-1 border border-gray-200 ml-auto flex-shrink-0">
+                            <button onclick="updateQty('${item.id}', -1)" class="w-6 h-6 flex items-center justify-center text-gray-600 font-bold hover:text-brand">-</button>
+                            <span class="font-bold text-sm w-4 text-center">${item.qty}</span>
+                            <button onclick="updateQty('${item.id}', 1)" class="w-6 h-6 flex items-center justify-center text-gray-600 font-bold hover:text-brand">+</button>
+                        </div>
+                    </div>
+                `).join('');
+
+            return `
+            <div class="max-w-4xl mx-auto flex flex-col lg:flex-row gap-8 w-full">
+                <div class="flex-1 w-full">
+                    <h2 class="text-2xl md:text-3xl font-black mb-6">Keranjang Belanja 🛒</h2>
+                    ${cartItemsHTML}
+                </div>
+                
+                ${state.cart.length > 0 ? `
+                <div class="lg:w-80 w-full flex-shrink-0">
+                    <div class="bg-dark text-white p-6 rounded-3xl shadow-xl lg:sticky lg:top-24 mt-6 lg:mt-0">
+                        <h3 class="font-bold text-xl mb-6 border-b border-gray-700 pb-4">Ringkasan</h3>
+                        <div class="flex justify-between mb-3 text-gray-300 text-sm">
+                            <span>Subtotal</span>
+                            <span>${formatRp(total)}</span>
+                        </div>
+                        <div class="flex justify-between mb-6 text-gray-300 text-sm border-b border-gray-700 pb-4">
+                            <span>Pajak (10%)</span>
+                            <span>${formatRp(total * 0.1)}</span>
+                        </div>
+                        <div class="flex justify-between items-center mb-8">
+                            <span class="font-bold">Total</span>
+                            <span class="font-black text-xl text-brand">${formatRp(total + (total * 0.1))}</span>
+                        </div>
+                        <button onclick="processCheckout()" class="w-full bg-brand hover:bg-orange-600 text-white py-4 rounded-2xl font-bold text-lg transition card-hover shadow-lg shadow-orange-500/30">
+                            Checkout Sekarang
+                        </button>
+                    </div>
+                </div>
+                ` : ''}
+            </div>`;
+        }
+
+        function getStatusColor(status) {
+            switch (status) {
+                case 'Pending': return 'bg-yellow-100 text-yellow-700';
+                case 'Proses': return 'bg-blue-100 text-blue-700';
+                case 'Selesai': return 'bg-green-100 text-green-700';
+                case 'Batal': return 'bg-red-100 text-red-700';
+                default: return 'bg-gray-100 text-gray-700';
+            }
+        }
+
+        function renderProfile() {
+            let historyHTML = state.orders.length === 0 ?
+                `<div class="text-center py-10 text-gray-400 font-bold">Belum ada riwayat pesanan.</div>` :
+                state.orders.map(o => {
+                    const dateStr = o.createdAt ? new Date(o.createdAt.toMillis()).toLocaleString('id-ID') : 'Baru saja';
+                    const itemsStr = o.items.map(i => `${i.qty}x ${i.name}`).join(', ');
+                    return `
+                    <div class="bg-white p-4 md:p-5 rounded-2xl shadow-sm border border-gray-100 mb-4 flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4">
+                        <div class="flex-1 min-w-0 w-full">
+                            <div class="text-xs text-gray-400 font-semibold mb-1">${dateStr} • ID: ${o.id.substring(0, 8)}</div>
+                            <div class="font-medium text-sm text-gray-700 mb-2 truncate" title="${itemsStr}">${itemsStr}</div>
+                            <div class="font-black text-lg">${formatRp(o.totalAmount)}</div>
+                        </div>
+                        <div class="px-4 py-1.5 rounded-full text-xs font-bold uppercase tracking-wider ${getStatusColor(o.status)} whitespace-nowrap self-start sm:self-auto">
+                            ${o.status}
+                        </div>
+                    </div>`;
+                }).join('');
+
+            return `
+            <div class="max-w-4xl mx-auto w-full">
+                <h2 class="text-2xl md:text-3xl font-black mb-8">Profil Kamu 👤</h2>
+                
+                <div class="bg-white p-4 md:p-6 rounded-3xl shadow-sm border border-gray-100 flex flex-wrap sm:flex-nowrap items-center gap-4 md:gap-6 mb-10 overflow-hidden">
+                    <img src="${state.user.photoURL || 'https://via.placeholder.com/150'}" class="w-16 h-16 md:w-20 md:h-20 rounded-full border-4 border-gray-50 flex-shrink-0">
+                    <div class="flex-1 min-w-0">
+                        <h3 class="text-lg md:text-xl font-bold truncate">${state.user.displayName}</h3>
+                        <p class="text-gray-500 text-xs md:text-sm truncate">${state.user.email}</p>
+                    </div>
+                    <button onclick="doLogout()" class="mt-2 sm:mt-0 bg-red-50 text-red-500 px-4 py-2 rounded-xl font-bold text-sm hover:bg-red-100 transition whitespace-nowrap">Logout</button>
+                </div>
+
+                <h3 class="text-xl font-bold mb-4">Riwayat Pesanan</h3>
+                <div class="space-y-4">
+                    ${historyHTML}
+                </div>
+            </div>`;
+        }
+
+        // --- UI COMPONENTS: ADMIN ---
+        function renderAdminLayout(content) {
+            return `
+            <div class="flex min-h-screen bg-gray-50 w-full">
+                <aside class="w-64 bg-dark text-white flex flex-col h-screen fixed z-50 overflow-y-auto hidden md:flex">
+                    <div class="p-6 border-b border-gray-800 flex-shrink-0">
+                        <h1 class="text-2xl font-black tracking-tighter">🍔 Monk<span class="text-brand">Fast</span></h1>
+                        <p class="text-xs text-gray-400 mt-1 uppercase tracking-widest font-bold">Admin Panel</p>
+                    </div>
+                    <nav class="flex-1 p-4 space-y-2">
+                        <button onclick="navigate('admin_dash')" class="w-full flex items-center gap-3 px-4 py-3 rounded-xl transition font-medium ${state.currentView === 'admin_dash' ? 'bg-brand text-white' : 'text-gray-400 hover:text-white hover:bg-gray-800'}">
+                            <i class="fa-solid fa-chart-pie w-5"></i> Dashboard
+                        </button>
+                        <button onclick="navigate('admin_menu')" class="w-full flex items-center gap-3 px-4 py-3 rounded-xl transition font-medium ${state.currentView === 'admin_menu' ? 'bg-brand text-white' : 'text-gray-400 hover:text-white hover:bg-gray-800'}">
+                            <i class="fa-solid fa-burger w-5"></i> Manajemen Menu
+                        </button>
+                        <button onclick="navigate('admin_reports')" class="w-full flex items-center gap-3 px-4 py-3 rounded-xl transition font-medium ${state.currentView === 'admin_reports' ? 'bg-brand text-white' : 'text-gray-400 hover:text-white hover:bg-gray-800'}">
+                            <i class="fa-solid fa-file-invoice-dollar w-5"></i> Laporan
+                        </button>
+                    </nav>
+                    <div class="p-4 border-t border-gray-800 flex-shrink-0">
+                        <button onclick="doLogout()" class="w-full flex items-center justify-center gap-2 bg-gray-800 text-gray-300 py-3 rounded-xl font-bold hover:bg-red-500 hover:text-white transition">
+                            <i class="fa-solid fa-arrow-right-from-bracket"></i> Logout
+                        </button>
+                    </div>
+                </aside>
+
+                <nav class="md:hidden glass fixed bottom-0 w-full border-t border-gray-200 z-50 flex justify-around p-3 bg-white">
+                     <button onclick="navigate('admin_dash')" class="flex flex-col items-center p-2 transition ${state.currentView === 'admin_dash' ? 'text-brand' : 'text-gray-500'}">
+                        <i class="fa-solid fa-chart-pie text-lg"></i><span class="text-[10px] font-bold mt-1">Dash</span>
+                    </button>
+                    <button onclick="navigate('admin_menu')" class="flex flex-col items-center p-2 transition ${state.currentView === 'admin_menu' ? 'text-brand' : 'text-gray-500'}">
+                        <i class="fa-solid fa-burger text-lg"></i><span class="text-[10px] font-bold mt-1">Menu</span>
+                    </button>
+                    <button onclick="navigate('admin_reports')" class="flex flex-col items-center p-2 transition ${state.currentView === 'admin_reports' ? 'text-brand' : 'text-gray-500'}">
+                        <i class="fa-solid fa-file-invoice-dollar text-lg"></i><span class="text-[10px] font-bold mt-1">Laporan</span>
+                    </button>
+                    <button onclick="doLogout()" class="flex flex-col items-center p-2 text-red-500">
+                        <i class="fa-solid fa-arrow-right-from-bracket text-lg"></i><span class="text-[10px] font-bold mt-1">Logout</span>
+                    </button>
+                </nav>
+
+                <main class="flex-1 md:ml-64 p-4 md:p-8 pb-24 overflow-x-hidden w-full">
+                    ${content}
+                </main>
+            </div>`;
+        }
+
+        function renderAdminDashboard() {
+            const totalOrders = state.allOrders.length;
+            const totalSales = state.allOrders.filter(o => o.status === 'Selesai').reduce((sum, o) => sum + o.totalAmount, 0);
+            const pendingOrders = state.allOrders.filter(o => o.status === 'Pending' || o.status === 'Proses').length;
+
+            return `
+            <div class="mb-8">
+                <h2 class="text-2xl md:text-3xl font-black text-dark mb-2">Dashboard Admin 🚀</h2>
+                <p class="text-gray-500 text-sm md:text-base">Ringkasan performa MonkFast hari ini.</p>
+            </div>
+
+            <div class="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-4 md:gap-6 mb-8">
+                <div class="bg-white p-5 md:p-6 rounded-3xl shadow-sm border border-gray-100 flex items-center gap-5">
+                    <div class="w-12 h-12 md:w-14 md:h-14 rounded-2xl bg-orange-100 text-brand flex items-center justify-center text-xl md:text-2xl flex-shrink-0"><i class="fa-solid fa-rupiah-sign"></i></div>
+                    <div class="min-w-0">
+                        <p class="text-[10px] md:text-xs font-bold text-gray-400 uppercase tracking-wider truncate">Total Penjualan</p>
+                        <h3 class="text-xl md:text-2xl font-black text-dark truncate">${formatRp(totalSales)}</h3>
+                    </div>
+                </div>
+                <div class="bg-white p-5 md:p-6 rounded-3xl shadow-sm border border-gray-100 flex items-center gap-5">
+                    <div class="w-12 h-12 md:w-14 md:h-14 rounded-2xl bg-blue-100 text-blue-500 flex items-center justify-center text-xl md:text-2xl flex-shrink-0"><i class="fa-solid fa-bag-shopping"></i></div>
+                    <div class="min-w-0">
+                        <p class="text-[10px] md:text-xs font-bold text-gray-400 uppercase tracking-wider truncate">Total Pesanan</p>
+                        <h3 class="text-xl md:text-2xl font-black text-dark">${totalOrders}</h3>
+                    </div>
+                </div>
+                <div class="bg-white p-5 md:p-6 rounded-3xl shadow-sm border border-gray-100 flex items-center gap-5">
+                    <div class="w-12 h-12 md:w-14 md:h-14 rounded-2xl bg-yellow-100 text-yellow-500 flex items-center justify-center text-xl md:text-2xl flex-shrink-0"><i class="fa-solid fa-clock"></i></div>
+                    <div class="min-w-0">
+                        <p class="text-[10px] md:text-xs font-bold text-gray-400 uppercase tracking-wider truncate">Pesanan Aktif</p>
+                        <h3 class="text-xl md:text-2xl font-black text-dark">${pendingOrders}</h3>
+                    </div>
+                </div>
+            </div>
+
+            <div class="bg-white p-4 md:p-6 rounded-3xl shadow-sm border border-gray-100 w-full overflow-x-auto">
+                <h3 class="font-bold text-lg mb-4">Grafik Penjualan 7 Hari Terakhir</h3>
+                <div class="min-w-[400px]">
+                    <canvas id="salesChart" height="100"></canvas>
+                </div>
+            </div>`;
+        }
+
+        function initChart() {
+            setTimeout(() => {
+                const ctx = document.getElementById('salesChart');
+                if (!ctx) return;
+
+                let salesData = [0, 0, 0, 0, 0, 0, 0];
+                const now = new Date();
+
+                state.allOrders.forEach(o => {
+                    if (o.status === 'Selesai' && o.createdAt) {
+                        const d = new Date(o.createdAt.toMillis());
+                        const diffTime = Math.abs(now - d);
+                        const diffDays = Math.floor(diffTime / (1000 * 60 * 60 * 24));
+                        if (diffDays < 7) {
+                            salesData[6 - diffDays] += o.totalAmount;
+                        }
+                    }
+                });
+
+                let labels = [];
+                for (let i = 6; i >= 0; i--) {
+                    const d = new Date(now);
+                    d.setDate(d.getDate() - i);
+                    labels.push(d.toLocaleDateString('id-ID', { weekday: 'short' }));
+                }
+
+                if (state.chartInstance) state.chartInstance.destroy();
+
+                state.chartInstance = new Chart(ctx, {
+                    type: 'line',
+                    data: {
+                        labels: labels,
+                        datasets: [{
+                            label: 'Pendapatan (Rp)',
+                            data: salesData,
+                            borderColor: '#FF5722',
+                            backgroundColor: 'rgba(255, 87, 34, 0.1)',
+                            borderWidth: 3,
+                            tension: 0.4,
+                            fill: true,
+                            pointBackgroundColor: '#FF5722'
+                        }]
+                    },
+                    options: {
+                        responsive: true,
+                        maintainAspectRatio: false,
+                        plugins: { legend: { display: false } },
+                        scales: {
+                            y: { beginAtZero: true, grid: { borderDash: [5, 5] } },
+                            x: { grid: { display: false } }
+                        }
+                    }
+                });
+            }, 100);
+        }
+
+        window.openMenuModal = (id = null) => {
+            const modal = document.getElementById('menuModal');
+            modal.classList.remove('hidden');
+            document.getElementById('menuForm').reset();
+            document.getElementById('menuId').value = '';
+
+            if (id) {
+                const item = state.menuItems.find(i => i.id === id);
+                if (item) {
+                    document.getElementById('menuId').value = item.id;
+                    document.getElementById('mName').value = item.name;
+                    document.getElementById('mCategory').value = item.category;
+                    document.getElementById('mPrice').value = item.price;
+                    document.getElementById('mDesc').value = item.description;
+                    document.getElementById('mImage').value = item.image || '';
+                }
+            }
+        };
+
+        window.closeMenuModal = () => {
+            document.getElementById('menuModal').classList.add('hidden');
+        };
+
+        window.saveMenu = async (e) => {
+            e.preventDefault();
+            const id = document.getElementById('menuId').value;
+            const data = {
+                name: document.getElementById('mName').value,
+                category: document.getElementById('mCategory').value,
+                price: parseFloat(document.getElementById('mPrice').value),
+                description: document.getElementById('mDesc').value,
+                image: document.getElementById('mImage').value
+            };
+
+            try {
+                if (id) {
+                    await updateDoc(doc(db, "menu", id), data);
+                    showToast("Menu berhasil diupdate!");
+                } else {
+                    data.createdAt = serverTimestamp();
+                    await addDoc(collection(db, "menu"), data);
+                    showToast("Menu berhasil ditambahkan!");
+                }
+                closeMenuModal();
+                navigate('admin_menu');
+            } catch (error) {
+                showToast("Error: " + error.message, "error");
+            }
+        };
+
+        window.deleteMenu = async (id) => {
+            if (confirm("Yakin ingin menghapus menu ini?")) {
+                try {
+                    await deleteDoc(doc(db, "menu", id));
+                    showToast("Menu dihapus!");
+                    navigate('admin_menu');
+                } catch (e) { showToast("Error!", "error"); }
+            }
+        };
+
+        function renderAdminMenu() {
+            let trs = state.menuItems.map((item, index) => `
+                <tr class="border-b border-gray-100 hover:bg-gray-50 transition">
+                    <td class="py-3 px-4 text-sm">${index + 1}</td>
+                    <td class="py-3 px-4 flex items-center gap-3">
+                        <div class="w-10 h-10 rounded-lg bg-gray-100 overflow-hidden flex items-center justify-center flex-shrink-0">
+                            ${item.image ? `<img src="${item.image}" class="w-full h-full object-cover">` : `<i class="fa-solid fa-burger text-gray-300"></i>`}
+                        </div>
+                        <div class="min-w-0 max-w-[150px] md:max-w-xs">
+                            <p class="font-bold text-dark truncate">${item.name}</p>
+                            <p class="text-xs text-gray-400 truncate">${item.category}</p>
+                        </div>
+                    </td>
+                    <td class="py-3 px-4 font-semibold text-sm whitespace-nowrap">${formatRp(item.price)}</td>
+                    <td class="py-3 px-4 text-right whitespace-nowrap">
+                        <button onclick="openMenuModal('${item.id}')" class="text-blue-500 hover:bg-blue-50 p-2 rounded-lg transition"><i class="fa-solid fa-pen"></i></button>
+                        <button onclick="deleteMenu('${item.id}')" class="text-red-500 hover:bg-red-50 p-2 rounded-lg transition ml-1"><i class="fa-solid fa-trash"></i></button>
+                    </td>
+                </tr>
+            `).join('');
+
+            return `
+            <div class="flex flex-col sm:flex-row justify-between items-start sm:items-center mb-8 gap-4">
+                <div>
+                    <h2 class="text-2xl md:text-3xl font-black text-dark">Manajemen Menu 🍔</h2>
+                    <p class="text-gray-500 text-sm">Kelola daftar makanan dan minuman.</p>
+                </div>
+                <button onclick="openMenuModal()" class="w-full sm:w-auto justify-center bg-brand text-white px-5 py-2.5 rounded-xl font-bold hover:bg-orange-600 transition shadow-lg shadow-orange-500/30 flex items-center gap-2">
+                    <i class="fa-solid fa-plus"></i> Tambah Menu
+                </button>
+            </div>
+
+            <div class="bg-white rounded-3xl shadow-sm border border-gray-100 overflow-x-auto w-full">
+                <table class="w-full text-left border-collapse min-w-[500px]">
+                    <thead>
+                        <tr class="bg-gray-50 text-gray-500 text-xs uppercase tracking-wider border-b border-gray-200">
+                            <th class="py-4 px-4 font-bold w-16">No</th>
+                            <th class="py-4 px-4 font-bold">Item</th>
+                            <th class="py-4 px-4 font-bold">Harga</th>
+                            <th class="py-4 px-4 font-bold text-right">Aksi</th>
+                        </tr>
+                    </thead>
+                    <tbody>${trs}</tbody>
+                </table>
+            </div>
+
+            <!-- Modal Form -->
+            <div id="menuModal" class="fixed inset-0 bg-black/50 backdrop-blur-sm hidden z-[100] flex items-center justify-center p-4">
+                <div class="bg-white w-full max-w-md rounded-3xl p-6 shadow-2xl transform transition-all max-h-[90vh] overflow-y-auto">
+                    <div class="flex justify-between items-center mb-6">
+                        <h3 class="text-xl font-black">Data Menu</h3>
+                        <button onclick="closeMenuModal()" class="text-gray-400 hover:text-dark"><i class="fa-solid fa-xmark text-xl"></i></button>
+                    </div>
+                    <form id="menuForm" onsubmit="saveMenu(event)" class="space-y-4">
+                        <input type="hidden" id="menuId">
+                        <div>
+                            <label class="text-xs font-bold text-gray-500 block mb-1">Nama Menu</label>
+                            <input type="text" id="mName" required class="w-full border border-gray-200 p-2.5 rounded-xl focus:border-brand focus:ring-1 focus:ring-brand outline-none text-sm font-medium">
+                        </div>
+                        <div class="grid grid-cols-2 gap-4">
+                            <div>
+                                <label class="text-xs font-bold text-gray-500 block mb-1">Kategori</label>
+                                <select id="mCategory" required class="w-full border border-gray-200 p-2.5 rounded-xl focus:border-brand focus:ring-1 focus:ring-brand outline-none text-sm font-medium">
+                                    <option value="Burger">Burger</option>
+                                    <option value="Pizza">Pizza</option>
+                                    <option value="Snack">Snack</option>
+                                    <option value="Minuman">Minuman</option>
+                                </select>
+                            </div>
+                            <div>
+                                <label class="text-xs font-bold text-gray-500 block mb-1">Harga (Rp)</label>
+                                <input type="number" id="mPrice" required class="w-full border border-gray-200 p-2.5 rounded-xl focus:border-brand focus:ring-1 focus:ring-brand outline-none text-sm font-medium">
+                            </div>
+                        </div>
+                        <div>
+                            <label class="text-xs font-bold text-gray-500 block mb-1">URL Gambar (Opsional)</label>
+                            <input type="url" id="mImage" class="w-full border border-gray-200 p-2.5 rounded-xl focus:border-brand focus:ring-1 focus:ring-brand outline-none text-sm font-medium" placeholder="https://...">
+                        </div>
+                        <div>
+                            <label class="text-xs font-bold text-gray-500 block mb-1">Deskripsi</label>
+                            <textarea id="mDesc" rows="3" required class="w-full border border-gray-200 p-2.5 rounded-xl focus:border-brand focus:ring-1 focus:ring-brand outline-none text-sm font-medium"></textarea>
+                        </div>
+                        <button type="submit" class="w-full bg-dark text-white py-3 rounded-xl font-bold hover:bg-black transition mt-4">Simpan Menu</button>
+                    </form>
+                </div>
+            </div>`;
+        }
+
+        window.updateOrderStatus = async (id, status) => {
+            try {
+                await updateDoc(doc(db, "orders", id), { status: status });
+                showToast("Status diupdate!");
+                navigate('admin_reports');
+            } catch (e) { showToast("Error", "error"); }
+        };
+
+        window.filterReports = () => {
+            const start = document.getElementById('startDate').value;
+            const end = document.getElementById('endDate').value;
+            let filteredOrders = state.allOrders;
+            if (start && end) {
+                const sDate = new Date(start).setHours(0, 0, 0, 0);
+                const eDate = new Date(end).setHours(23, 59, 59, 999);
+                filteredOrders = state.allOrders.filter(o => {
+                    if (!o.createdAt) return false;
+                    const time = o.createdAt.toMillis();
+                    return time >= sDate && time <= eDate;
+                });
+            }
+            document.getElementById('report-tbody').innerHTML = generateReportRows(filteredOrders);
+        };
+
+        function generateReportRows(orders) {
+            if (orders.length === 0) return `<tr><td colspan="6" class="text-center py-6 text-gray-400 font-bold">Tidak ada data.</td></tr>`;
+            return orders.map((o, i) => {
+                const dateStr = o.createdAt ? new Date(o.createdAt.toMillis()).toLocaleString('id-ID') : '-';
+                return `
+                <tr class="border-b border-gray-100 hover:bg-gray-50 text-sm">
+                    <td class="py-3 px-4">${i + 1}</td>
+                    <td class="py-3 px-4 font-mono text-xs text-gray-500">${o.id.substring(0, 8)}</td>
+                    <td class="py-3 px-4 whitespace-nowrap">${dateStr}</td>
+                    <td class="py-3 px-4 font-bold text-dark min-w-[120px]">${o.customerName}</td>
+                    <td class="py-3 px-4 font-semibold whitespace-nowrap">${formatRp(o.totalAmount)}</td>
+                    <td class="py-3 px-4">
+                        <select onchange="updateOrderStatus('${o.id}', this.value)" class="text-xs font-bold rounded-lg px-2 py-1 border-none outline-none cursor-pointer ${getStatusColor(o.status)}">
+                            <option value="Pending" ${o.status === 'Pending' ? 'selected' : ''}>Pending</option>
+                            <option value="Proses" ${o.status === 'Proses' ? 'selected' : ''}>Proses</option>
+                            <option value="Selesai" ${o.status === 'Selesai' ? 'selected' : ''}>Selesai</option>
+                            <option value="Batal" ${o.status === 'Batal' ? 'selected' : ''}>Batal</option>
+                        </select>
+                    </td>
+                </tr>`;
+            }).join('');
+        }
+
+        window.exportCSV = () => {
+            let csvContent = "data:text/csv;charset=utf-8,ID,Tanggal,Customer,Total,Status\n";
+            state.allOrders.forEach(o => {
+                const dateStr = o.createdAt ? new Date(o.createdAt.toMillis()).toLocaleString('id-ID') : '-';
+                let row = `${o.id},"${dateStr}","${o.customerName}",${o.totalAmount},${o.status}`;
+                csvContent += row + "\r\n";
+            });
+            const encodedUri = encodeURI(csvContent);
+            const link = document.createElement("a");
+            link.setAttribute("href", encodedUri);
+            link.setAttribute("download", "laporan_monkfast.csv");
+            document.body.appendChild(link);
+            link.click();
+            document.body.removeChild(link);
+        };
+
+        window.exportPDF = () => {
+            const { jsPDF } = window.jspdf;
+            const doc = new jsPDF();
+            doc.setFont("helvetica", "bold");
+            doc.text("Laporan Transaksi MonkFast", 14, 20);
+
+            const tableColumn = ["No", "ID Order", "Tanggal", "Customer", "Total", "Status"];
+            const tableRows = [];
+
+            state.allOrders.forEach((o, i) => {
+                const dateStr = o.createdAt ? new Date(o.createdAt.toMillis()).toLocaleDateString('id-ID') : '-';
+                const orderData = [
+                    i + 1,
+                    o.id.substring(0, 8),
+                    dateStr,
+                    o.customerName,
+                    formatRp(o.totalAmount),
+                    o.status
+                ];
+                tableRows.push(orderData);
+            });
+
+            doc.autoTable({
+                head: [tableColumn],
+                body: tableRows,
+                startY: 30,
+                theme: 'grid',
+                styles: { fontSize: 9, font: 'helvetica' },
+                headStyles: { fillColor: [255, 87, 34] }
+            });
+            doc.save("laporan_monkfast.pdf");
+        };
+
+        function renderAdminReports() {
+            return `
+            <div class="flex flex-col md:flex-row justify-between items-start md:items-center mb-8 gap-4">
+                <div>
+                    <h2 class="text-2xl md:text-3xl font-black text-dark">Laporan Transaksi 📊</h2>
+                    <p class="text-gray-500 text-sm">Pantau semua pesanan yang masuk.</p>
+                </div>
+                <div class="flex gap-2 w-full md:w-auto">
+                    <button onclick="exportCSV()" class="flex-1 md:flex-none justify-center bg-white border border-gray-200 text-gray-700 px-4 py-2 rounded-xl font-bold text-sm hover:bg-gray-50 transition shadow-sm flex items-center gap-2"><i class="fa-solid fa-file-csv text-green-600"></i> CSV</button>
+                    <button onclick="exportPDF()" class="flex-1 md:flex-none justify-center bg-white border border-gray-200 text-gray-700 px-4 py-2 rounded-xl font-bold text-sm hover:bg-gray-50 transition shadow-sm flex items-center gap-2"><i class="fa-solid fa-file-pdf text-red-600"></i> PDF</button>
+                </div>
+            </div>
+
+            <div class="bg-white p-4 rounded-2xl shadow-sm border border-gray-100 mb-6 flex flex-wrap items-end gap-4 w-full">
+                <div class="w-full sm:w-auto flex-1">
+                    <label class="text-xs font-bold text-gray-500 block mb-1">Dari Tanggal</label>
+                    <input type="date" id="startDate" class="w-full border border-gray-200 p-2 rounded-lg text-sm outline-none focus:border-brand">
+                </div>
+                <div class="w-full sm:w-auto flex-1">
+                    <label class="text-xs font-bold text-gray-500 block mb-1">Sampai Tanggal</label>
+                    <input type="date" id="endDate" class="w-full border border-gray-200 p-2 rounded-lg text-sm outline-none focus:border-brand">
+                </div>
+                <button onclick="filterReports()" class="w-full sm:w-auto bg-dark text-white px-5 py-2.5 rounded-lg font-bold text-sm hover:bg-black transition">Filter</button>
+            </div>
+
+            <div class="bg-white rounded-3xl shadow-sm border border-gray-100 overflow-x-auto w-full">
+                <table class="w-full text-left border-collapse min-w-[700px]">
+                    <thead>
+                        <tr class="bg-gray-50 text-gray-500 text-xs uppercase tracking-wider border-b border-gray-200">
+                            <th class="py-4 px-4 font-bold w-12">No</th>
+                            <th class="py-4 px-4 font-bold">ID</th>
+                            <th class="py-4 px-4 font-bold">Waktu</th>
+                            <th class="py-4 px-4 font-bold">Customer</th>
+                            <th class="py-4 px-4 font-bold">Total</th>
+                            <th class="py-4 px-4 font-bold">Status</th>
+                        </tr>
+                    </thead>
+                    <tbody id="report-tbody">
+                        ${generateReportRows(state.allOrders)}
+                    </tbody>
+                </table>
+            </div>`;
+        }
+
+    </script>
+</body>
+
+</html>
